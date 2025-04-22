@@ -29,3 +29,6 @@ testTaskPriority: tests/taskPriorityTest.c $(BASE_FILES)
 
 testDispatcherTimer: tests/dispatcherTimerTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testDispatcherTimer $(BASE_INCLUDES) $(BASE_FILES) tests/dispatcherTimerTest.c
+
+testDispatcherStressTimer: tests/dispatcherTimerStressTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testDispatcherStressTimer $(BASE_INCLUDES) $(BASE_FILES) tests/dispatcherTimerStressTest.c
