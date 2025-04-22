@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "hqueue.h"
+#include "pqueue.h"
 
-hqueue_t hqueue_init(int (*comparator)(void *, void *), void (*update_index)(void *, int index))
+pqueue_t pqueue_init(int (*comparator)(void *, void *), void (*update_index)(void *, int index))
 {
-    hqueue_t queue = {0};
+    pqueue_t queue = {0};
     queue.capacity = 0;
     queue.count = 0;
     queue.items = NULL;
@@ -15,22 +15,22 @@ hqueue_t hqueue_init(int (*comparator)(void *, void *), void (*update_index)(voi
     return queue;
 }
 
-int hqueue_size(hqueue_t *queue)
+int pqueue_size(pqueue_t *queue)
 {
     return queue->count;
 }
 
-void shift_up(hqueue_t *queue, int index);
-void shift_down(hqueue_t *queue, int index);
+void shift_up(pqueue_t *queue, int index);
+void shift_down(pqueue_t *queue, int index);
 
-void set_item(hqueue_t *queue, void *item, int index)
+void set_item(pqueue_t *queue, void *item, int index)
 {
     queue->items[index] = item;
     if (queue->update_index != NULL)
         queue->update_index(item, index);
 }
 
-void swap_item(hqueue_t *queue, int a, int b)
+void swap_item(pqueue_t *queue, int a, int b)
 {
     void *temp = queue->items[a];
     set_item(queue, queue->items[b], a);
@@ -52,7 +52,7 @@ int parent_index(int index)
     return (index - 1) / 2;
 }
 
-int hqueue_append(hqueue_t *queue, void *item)
+int pqueue_append(pqueue_t *queue, void *item)
 {
     if (queue->count + 1 >= queue->capacity)
     {
@@ -65,7 +65,7 @@ int hqueue_append(hqueue_t *queue, void *item)
                            : realloc(queue->items, queue->capacity * sizeof(*queue->items));
         if (queue->items == NULL)
         {
-            fprintf(stderr, "ERROR hqueue_append: failed to alloc queue->items\n");
+            fprintf(stderr, "ERROR pqueue_append: failed to alloc queue->items\n");
             return 1;
         }
     }
@@ -73,20 +73,20 @@ int hqueue_append(hqueue_t *queue, void *item)
     shift_up(queue, queue->count - 1);
     return 0;
 }
-void *hqueue_pop(hqueue_t *queue)
+void *pqueue_pop(pqueue_t *queue)
 {
     assert(queue->count > 0 && "Queue empty");
-    return hqueue_remove(queue, 0);
+    return pqueue_remove(queue, 0);
 }
 
-void hqueue_update(hqueue_t *queue, int index)
+void pqueue_update(pqueue_t *queue, int index)
 {
     assert(index >= 0);
     shift_down(queue, index);
     shift_up(queue, index);
 }
 
-void* hqueue_remove(hqueue_t *queue, int index) {
+void* pqueue_remove(pqueue_t *queue, int index) {
     void *item = queue->items[index];
     swap_item(queue, index, --queue->count);
     shift_down(queue, index);
@@ -99,7 +99,7 @@ void* hqueue_remove(hqueue_t *queue, int index) {
     return item;
 }
 
-void shift_up(hqueue_t *queue, int index)
+void shift_up(pqueue_t *queue, int index)
 {
     while (index > 0)
     {
@@ -114,7 +114,7 @@ void shift_up(hqueue_t *queue, int index)
     }
 }
 
-void shift_down(hqueue_t *queue, int index)
+void shift_down(pqueue_t *queue, int index)
 {
     while ((2 * index) + 1 < queue->count)
     {

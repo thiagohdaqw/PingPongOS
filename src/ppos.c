@@ -5,10 +5,9 @@
 #include <valgrind/valgrind.h>
 #include <signal.h>
 #include <sys/time.h>
-#include <stdint.h>
 
 #include"ppos.h"
-#include"hqueue.h"
+#include"pqueue.h"
 
 // #define DEBUG
 #define STACK_SIZE 64*1024
@@ -19,7 +18,6 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-
 static int last_task_id = 0;
 
 static task_t *current_task = NULL;
@@ -27,9 +25,9 @@ static task_t *dispatcher_scheduled_task = NULL;
 static task_t main_task = {0};
 static task_t dispatcher_task = {0};
 
-static hqueue_t ready_queue = {0};
+static pqueue_t ready_queue = {0};
 
-static uint64_t current_tick = 0;
+static unsigned int current_tick = 0;
 static struct itimerval dispatcher_timer = {
     .it_interval = {
         .tv_usec = DISPATCHER_TIMER_INTERVAL_MS*1000,
@@ -63,7 +61,7 @@ void ppos_init () {
         exit(1);
     }
 
-    ready_queue = hqueue_init(min_task_comparator, update_task_ready_queue_index);
+    ready_queue = pqueue_init(min_task_comparator, update_task_ready_queue_index);
 
     main_task.id = 0;
     main_task.status = RUNNING;
@@ -92,9 +90,10 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
 
     task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
     task->last_schedule_tick = current_tick;
+    task->tick_start = current_tick;
     makecontext(&task->context, (void*)(*start_routine), 1, arg);
 
-    hqueue_append(&ready_queue, (void*)task);
+    pqueue_append(&ready_queue, (void*)task);
 
     #ifdef DEBUG
     printf ("task_init: iniciada tarefa %d\n", task->id) ;
@@ -116,9 +115,23 @@ int task_switch (task_t *task) {
     return swapcontext(current_context, &task->context);
 }
 
+void print_task_exit_stats(task_t *task) {
+    unsigned int cpu_time = task->tick_used*DISPATCHER_TIMER_INTERVAL_MS;
+    unsigned int execution_time = (current_tick-task->tick_start)*DISPATCHER_TIMER_INTERVAL_MS;
+    printf(
+        "Task %d exit: execution time %u ms, processor time %d ms, %d activations\n",
+        task->id,
+        execution_time,
+        cpu_time,
+        task->activations
+    );
+}
+
 void task_exit (int exit_code) {
     if (current_task == &main_task) {
+        print_task_exit_stats(&main_task);
         task_switch(&dispatcher_task);
+        print_task_exit_stats(&dispatcher_task);
         exit(dispatcher_task.exit_code);
     }
 
@@ -129,6 +142,8 @@ void task_exit (int exit_code) {
     current_task->status = EXITED;
     current_task->exit_code = exit_code;
     
+    print_task_exit_stats(current_task);
+    
     if (current_task != &dispatcher_task) {
         task_switch(&dispatcher_task);
     } else {
@@ -138,7 +153,7 @@ void task_exit (int exit_code) {
 
 void task_yield () {
     current_task->status = READY;
-    hqueue_append(&ready_queue, (void*)current_task);
+    pqueue_append(&ready_queue, (void*)current_task);
     task_switch(&dispatcher_task);
 }
 
@@ -165,7 +180,7 @@ void task_setprio (task_t *task, int prio) {
     task->priority = MAX(MIN(prio, MAX_TASK_PRIORITY), -MAX_TASK_PRIORITY);
 
     if (task->ready_queue_index >= 0) {
-        hqueue_update(&ready_queue, task->ready_queue_index);
+        pqueue_update(&ready_queue, task->ready_queue_index);
     }
 }
 
@@ -176,13 +191,14 @@ int task_getprio (task_t *task) {
 }
 
 void dispatcher(void *) {
-    hqueue_remove(&ready_queue, dispatcher_task.ready_queue_index);
+    pqueue_remove(&ready_queue, dispatcher_task.ready_queue_index);
 
-    while (hqueue_size(&ready_queue) > 0) {
-        dispatcher_scheduled_task = (task_t*)hqueue_pop(&ready_queue);
+    while (pqueue_size(&ready_queue) > 0) {
+        dispatcher_scheduled_task = (task_t*)pqueue_pop(&ready_queue);
         
         dispatcher_scheduled_task->last_schedule_tick = current_tick;
         dispatcher_scheduled_task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
+        dispatcher_scheduled_task->activations += 1;
         task_setprio(dispatcher_scheduled_task, dispatcher_scheduled_task->priority+1);
 
         #ifdef DEBUG
@@ -214,11 +230,18 @@ void dispatcher(void *) {
 
 void dispatcher_timer_handler(int signum) {
     current_tick += 1;
-    assert(current_tick < UINT64_MAX && "TODO current_tick overflow");
+    assert(current_tick < UINT32_MAX && "TODO current_tick overflow");
+
+    current_task->tick_used += 1;
+
     if (dispatcher_scheduled_task == NULL || dispatcher_scheduled_task == &main_task || dispatcher_scheduled_task == &dispatcher_task)
         return;
     dispatcher_scheduled_task->clock_ticks -= 1;
     if (dispatcher_scheduled_task->clock_ticks < 0) {
         task_yield();
     }
+}
+
+unsigned int systime() {
+    return current_tick;
 }

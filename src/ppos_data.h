@@ -32,11 +32,14 @@ typedef struct task_t
   int vg_id;
 
   int priority;
-  int hqueue_index;
+  int pqueue_index;
   int ready_queue_index;
 
   int clock_ticks;
-  uint64_t last_schedule_tick;
+  unsigned int tick_used;
+  unsigned int tick_start;
+  unsigned int activations;
+  unsigned int last_schedule_tick;
 } task_t ;
 
 // estrutura que define um semáforo
