@@ -17,6 +17,7 @@ typedef enum {
   RUNNING,
   SUSPENDED,
   SLEEPING,
+  WAITING,
   EXITED,
 } task_status;
 
@@ -50,9 +51,11 @@ typedef struct task_t
 } task_t ;
 
 // estrutura que define um semáforo
-typedef struct
+typedef struct semaphore_t
 {
-  // preencher quando necessário
+  struct semaphore_t *prev, *next;
+  int value;
+  task_t *waiting_tasks;
 } semaphore_t ;
 
 // estrutura que define um mutex

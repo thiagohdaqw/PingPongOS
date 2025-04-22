@@ -14,6 +14,13 @@
 
 // macros importantes ==========================================================
 
+// #define DEBUG
+#ifdef DEBUG
+    #define DEBUG_PRINT(f, ...) printf(f, ##__VA_ARGS__)
+#else
+    #define DEBUG_PRINT(...)
+#endif
+
 // habilita compatibilidade POSIX no MacOS X (para ucontext.h)
 #define _XOPEN_SOURCE 600
 

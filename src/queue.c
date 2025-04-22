@@ -31,7 +31,7 @@ void queue_print (char *name, queue_t *queue, void print_elem (void*) ) {
 
 int queue_append (queue_t **queue, queue_t *elem) {
     if (elem->next != NULL || elem-> prev != NULL) {
-        fprintf(stderr, "ERROR: elem already in a queue\n");
+        fprintf(stderr, "ERROR queue_append: elem already in a queue\n");
         return -1;
     }
 
@@ -63,12 +63,10 @@ int queue_contains(queue_t *queue, queue_t *elem) {
 
 int queue_remove (queue_t **queue, queue_t *elem) {
     if (*queue == NULL) {
-        fprintf(stderr, "ERROR: queue empty\n");
         return -1;
     }
 
     if (elem->prev == NULL || elem->next == NULL) {
-        fprintf(stderr, "ERROR: elem is not in the queue\n");
         return -1;
     }
 

@@ -11,7 +11,6 @@
 #include"pqueue.h"
 #include"queue.h"
 
-// #define DEBUG
 #define TASK_STATS
 
 #define STACK_SIZE 64*1024
@@ -24,7 +23,8 @@
 
 static int last_task_id = 0;
 
-static task_t *current_task = NULL;
+task_t *current_task = NULL;
+
 static task_t *dispatcher_scheduled_task = NULL;
 static task_t main_task = {0};
 static task_t dispatcher_task = {0};
@@ -87,6 +87,7 @@ void ppos_init () {
 void task_ready(task_t *task) {
     task->status = READY;
     pqueue_append(&ready_queue, (void*)task);
+    DEBUG_PRINT("[%d] task_ready: turning task %d ready\n", current_task->id, task->id);
 }
 
 int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
@@ -141,8 +142,9 @@ void print_task_exit_stats(task_t *task) {
     unsigned int cpu_time = task->tick_used*DISPATCHER_TIMER_INTERVAL_MS;
     unsigned int execution_time = (current_tick-task->tick_start)*DISPATCHER_TIMER_INTERVAL_MS;
     printf(
-        "Task %d exit: execution time %u ms, processor time %d ms, %d activations\n",
+        "Task %d exit: code %d, execution time %u ms, processor time %d ms, %d activations\n",
         task->id,
+        task->exit_code,
         execution_time,
         cpu_time,
         task->activations
@@ -157,9 +159,7 @@ void task_exit (int exit_code) {
         exit(exit_code);
     }
 
-    #ifdef DEBUG
-    printf ("task_exit: tarefa %d sendo encerrada\n", current_task->id) ;
-    #endif
+    DEBUG_PRINT("task_exit: tarefa %d sendo encerrada\n", current_task->id);
 
     current_task->status = EXITED;
     current_task->exit_code = exit_code;
@@ -177,6 +177,7 @@ void task_yield () {
     if (current_task->status == RUNNING) {
         task_ready(current_task);
     }
+    DEBUG_PRINT("[%d] task_yield: yielding task with status %d\n", current_task->id, current_task->status);
     task_switch(&dispatcher_task);
 }
 
@@ -228,18 +229,14 @@ void dispatcher(void *) {
             dispatcher_scheduled_task->status = RUNNING;
             task_setprio(dispatcher_scheduled_task, dispatcher_scheduled_task->priority+1);
 
-            #ifdef DEBUG
-                printf ("dispatcher: switching to task %d\n", dispatcher_scheduled_task->id) ;
-            #endif
+            DEBUG_PRINT ("dispatcher: switching to task %d\n", dispatcher_scheduled_task->id) ;
 
             if (task_switch(dispatcher_scheduled_task) < 0) {
                 fprintf(stderr, "ERROR dispatcher: failed to switch to task %d\n", dispatcher_scheduled_task->id);
                 task_exit(-1);
             }
 
-            #ifdef DEBUG
-                printf ("dispatcher: task %d returned with status %d\n", dispatcher_scheduled_task->id, dispatcher_scheduled_task->status);
-            #endif
+            DEBUG_PRINT ("dispatcher: task %d returned with status %d\n", dispatcher_scheduled_task->id, dispatcher_scheduled_task->status);
 
             switch (dispatcher_scheduled_task->status) {
                 case EXITED:
@@ -259,7 +256,7 @@ void dispatcher(void *) {
             pause();
             poll_sleeping_tasks();
         }
-    } while (pqueue_size(&sleep_queue) > 0);
+    } while (pqueue_size(&sleep_queue) > 0 || pqueue_size(&ready_queue) > 0);
     
     
     task_exit(0);
@@ -271,10 +268,11 @@ void dispatcher_timer_handler(int signum) {
 
     current_task->tick_used += 1;
 
-    if (current_task == NULL || dispatcher_scheduled_task == NULL || dispatcher_scheduled_task == &dispatcher_task)
+    if (current_task == NULL || dispatcher_scheduled_task == NULL || current_task == &dispatcher_task)
         return;
     dispatcher_scheduled_task->clock_ticks -= 1;
     if (dispatcher_scheduled_task->clock_ticks < 0) {
+        DEBUG_PRINT("[%d] dispatcher_timer_handler: task has reached limit tick", current_task->id);
         task_yield();
     }
 }
@@ -293,14 +291,25 @@ int task_wait (task_t *task) {
     task->has_suspended_tasks = true;
     current_task->waiting_task_id = task->id;
     current_task->status = SUSPENDED;
+
+    queue_append((queue_t**)&suspended_tasks, (queue_t*)current_task);
+    
+    DEBUG_PRINT("[%d] task_wait: waiting for task %d\n", current_task->id, task->id);
+
     task_yield();
+
+    DEBUG_PRINT("[%d] task_wait: awaked from task %d\n", current_task->id, task->id);
     return task->exit_code;
 }
 
 void task_awake (task_t *task, task_t **queue) {
-    queue_remove((queue_t**)queue, (queue_t*)task);
+    if (queue_remove((queue_t**)queue, (queue_t*)task) < 0) {
+        fprintf(stderr, "ERROR task_awake: failed to remove task %d from queue\n", task->id);
+    }
     task->waiting_task_id = -1;
-    task_ready(current_task);
+
+    DEBUG_PRINT("task_awake: task %d awaking task %d\n", current_task->id, task->id);
+    task_ready(task);
 }
 
 void awake_suspended_tasks(task_t *exited_task) {
@@ -312,7 +321,7 @@ void awake_suspended_tasks(task_t *exited_task) {
 
         if (suspended_task->waiting_task_id == exited_task->id) {
             task_awake(suspended_task, &suspended_tasks);
-        } else if (next_task == suspended_tasks)
+        } else if (next_task == suspended_tasks || next_task == current_task)
             break;
         suspended_task = next_task;
     }
@@ -323,7 +332,10 @@ void task_sleep (int t) {
     current_task->sleep_expiration_tick = expiration;
     pqueue_append(&sleep_queue, (void*)current_task);
     current_task->status = SLEEPING;
+
+    DEBUG_PRINT("task_sleep: task %d sleeping for %d ms\n", current_task->id, t);
     task_yield();
+    DEBUG_PRINT("task_sleep: task %d awaked from sleeping\n", current_task->id, t);
 }
 
 void poll_sleeping_tasks() {

@@ -1,5 +1,5 @@
 CFLAGS = -ggdb -Wall -lm
-BASE_FILES = src/ppos.c src/queue.c src/pqueue.c
+BASE_FILES = src/ppos.c src/ppos_ipc.c src/queue.c src/pqueue.c
 BASE_INCLUDES = -Isrc/
 
 testQueue: $(BASE_FILES) tests/queueTest.c
@@ -41,3 +41,6 @@ testTaskSuspend: tests/taskSuspendTest.c $(BASE_FILES)
 
 testTaskSleep: tests/taskSleepTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testTaskSleep $(BASE_INCLUDES) $(BASE_FILES) tests/taskSleepTest.c
+
+testSemaphore: tests/semaphoreTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testSemaphore $(BASE_INCLUDES) $(BASE_FILES) tests/semaphoreTest.c
