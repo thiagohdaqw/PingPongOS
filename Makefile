@@ -36,5 +36,8 @@ testDispatcherStressTimer: tests/dispatcherTimerStressTest.c $(BASE_FILES)
 testTime: tests/timeTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testTime $(BASE_INCLUDES) $(BASE_FILES) tests/timeTest.c
 
-testTaskSupend: tests/taskSuspendTest.c $(BASE_FILES)
+testTaskSuspend: tests/taskSuspendTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testTaskSuspend $(BASE_INCLUDES) $(BASE_FILES) tests/taskSuspendTest.c
+
+testTaskSleep: tests/taskSleepTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testTaskSleep $(BASE_INCLUDES) $(BASE_FILES) tests/taskSleepTest.c

@@ -5,6 +5,7 @@
 #include <valgrind/valgrind.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include"ppos.h"
 #include"pqueue.h"
@@ -29,6 +30,7 @@ static task_t main_task = {0};
 static task_t dispatcher_task = {0};
 
 static pqueue_t ready_queue = {0};
+static pqueue_t sleep_queue = {0};
 static task_t *suspended_tasks = NULL; 
 
 static unsigned int current_tick = 0;
@@ -44,12 +46,16 @@ static struct itimerval dispatcher_timer = {
 void dispatcher(void *);
 void dispatcher_timer_handler(int);
 
-int min_task_comparator(void *a, void *b) {
+int min_task_priority_comparator(void *a, void *b) {
     int result = ((task_t*)a)->priority - ((task_t*)b)->priority;
     if (result == 0) {
         return ((task_t*)a)->last_schedule_tick - ((task_t*)b)->last_schedule_tick;
     }
     return result;
+}
+
+int min_task_sleep_comparator(void *a, void *b) {
+    return ((task_t*)a)->sleep_expiration_tick - ((task_t*)b)->sleep_expiration_tick;
 }
 
 void update_task_ready_queue_index(void *a, int index) {
@@ -65,7 +71,8 @@ void ppos_init () {
         exit(1);
     }
 
-    ready_queue = pqueue_init(min_task_comparator, update_task_ready_queue_index);
+    ready_queue = pqueue_init(min_task_priority_comparator, update_task_ready_queue_index);
+    sleep_queue = pqueue_init(min_task_sleep_comparator, NULL);
 
     main_task.id = 0;
     main_task.status = RUNNING;
@@ -167,7 +174,7 @@ void task_exit (int exit_code) {
 }
 
 void task_yield () {
-    if (current_task->status != SUSPENDED) {
+    if (current_task->status == RUNNING) {
         task_ready(current_task);
     }
     task_switch(&dispatcher_task);
@@ -206,43 +213,54 @@ int task_getprio (task_t *task) {
 }
 
 void awake_suspended_tasks(task_t *exited_task);
+void poll_sleeping_tasks();
 
 void dispatcher(void *) {
     pqueue_remove(&ready_queue, dispatcher_task.ready_queue_index);
 
-    while (pqueue_size(&ready_queue) > 0) {
-        dispatcher_scheduled_task = (task_t*)pqueue_pop(&ready_queue);
-        
-        dispatcher_scheduled_task->last_schedule_tick = current_tick;
-        dispatcher_scheduled_task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
-        dispatcher_scheduled_task->activations += 1;
-        dispatcher_scheduled_task->status = RUNNING;
-        task_setprio(dispatcher_scheduled_task, dispatcher_scheduled_task->priority+1);
+    do {
+        while (pqueue_size(&ready_queue) > 0) {
+            dispatcher_scheduled_task = (task_t*)pqueue_pop(&ready_queue);
+            
+            dispatcher_scheduled_task->last_schedule_tick = current_tick;
+            dispatcher_scheduled_task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
+            dispatcher_scheduled_task->activations += 1;
+            dispatcher_scheduled_task->status = RUNNING;
+            task_setprio(dispatcher_scheduled_task, dispatcher_scheduled_task->priority+1);
 
-        #ifdef DEBUG
-            printf ("dispatcher: switching to task %d\n", dispatcher_scheduled_task->id) ;
-        #endif
+            #ifdef DEBUG
+                printf ("dispatcher: switching to task %d\n", dispatcher_scheduled_task->id) ;
+            #endif
 
-        if (task_switch(dispatcher_scheduled_task) < 0) {
-            fprintf(stderr, "ERROR dispatcher: failed to switch to task %d\n", dispatcher_scheduled_task->id);
-            task_exit(-1);
+            if (task_switch(dispatcher_scheduled_task) < 0) {
+                fprintf(stderr, "ERROR dispatcher: failed to switch to task %d\n", dispatcher_scheduled_task->id);
+                task_exit(-1);
+            }
+
+            #ifdef DEBUG
+                printf ("dispatcher: task %d returned with status %d\n", dispatcher_scheduled_task->id, dispatcher_scheduled_task->status);
+            #endif
+
+            switch (dispatcher_scheduled_task->status) {
+                case EXITED:
+                    awake_suspended_tasks(dispatcher_scheduled_task);
+                    task_destroy(dispatcher_scheduled_task);
+                    break;
+                default:
+                    break;
+            }
+
+            dispatcher_scheduled_task = NULL;
+
+            poll_sleeping_tasks();
         }
-
-        #ifdef DEBUG
-            printf ("dispatcher: task %d returned with status %d\n", dispatcher_scheduled_task->id, dispatcher_scheduled_task->status);
-        #endif
-
-        switch (dispatcher_scheduled_task->status) {
-            case EXITED:
-                awake_suspended_tasks(dispatcher_scheduled_task);
-                task_destroy(dispatcher_scheduled_task);
-                break;
-            default:
-                break;
+        poll_sleeping_tasks();
+        if (pqueue_size(&ready_queue) == 0) {
+            pause();
+            poll_sleeping_tasks();
         }
-
-        dispatcher_scheduled_task = NULL;
-    }
+    } while (pqueue_size(&sleep_queue) > 0);
+    
     
     task_exit(0);
 }
@@ -297,5 +315,21 @@ void awake_suspended_tasks(task_t *exited_task) {
         } else if (next_task == suspended_tasks)
             break;
         suspended_task = next_task;
+    }
+}
+
+void task_sleep (int t) {
+    unsigned int expiration = current_tick + (t/DISPATCHER_TIMER_INTERVAL_MS);
+    current_task->sleep_expiration_tick = expiration;
+    pqueue_append(&sleep_queue, (void*)current_task);
+    current_task->status = SLEEPING;
+    task_yield();
+}
+
+void poll_sleeping_tasks() {
+    while (pqueue_size(&sleep_queue) > 0
+        && ((task_t*)pqueue_peek(&sleep_queue))->sleep_expiration_tick <= current_tick) {
+        task_t *task = pqueue_pop(&sleep_queue);
+        task_ready(task);
     }
 }

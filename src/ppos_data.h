@@ -16,6 +16,7 @@ typedef enum {
   READY,
   RUNNING,
   SUSPENDED,
+  SLEEPING,
   EXITED,
 } task_status;
 
@@ -44,6 +45,8 @@ typedef struct task_t
 
   int waiting_task_id;
   bool has_suspended_tasks;
+
+  unsigned int sleep_expiration_tick;
 } task_t ;
 
 // estrutura que define um semáforo

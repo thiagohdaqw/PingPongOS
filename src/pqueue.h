@@ -16,6 +16,7 @@ int pqueue_size(pqueue_t *queue);
 
 int pqueue_append(pqueue_t *queue, void *item);
 void* pqueue_pop(pqueue_t *queue);
+void* pqueue_peek(pqueue_t *queue);
 void pqueue_update(pqueue_t *queue, int index);
 void* pqueue_remove(pqueue_t *queue, int index);
 #endif

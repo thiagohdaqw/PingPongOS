@@ -79,6 +79,11 @@ void *pqueue_pop(pqueue_t *queue)
     return pqueue_remove(queue, 0);
 }
 
+void* pqueue_peek(pqueue_t *queue) {
+    assert(queue->count > 0 && "Queue empty");
+    return queue->items[0];
+}
+
 void pqueue_update(pqueue_t *queue, int index)
 {
     assert(index >= 0);
