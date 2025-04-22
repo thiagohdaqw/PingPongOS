@@ -8,8 +8,11 @@
 
 #include"ppos.h"
 #include"pqueue.h"
+#include"queue.h"
 
 // #define DEBUG
+#define TASK_STATS
+
 #define STACK_SIZE 64*1024
 #define MAX_TASK_PRIORITY 20
 #define TASK_TIMER_TICK 20
@@ -26,6 +29,7 @@ static task_t main_task = {0};
 static task_t dispatcher_task = {0};
 
 static pqueue_t ready_queue = {0};
+static task_t *suspended_tasks = NULL; 
 
 static unsigned int current_tick = 0;
 static struct itimerval dispatcher_timer = {
@@ -33,7 +37,7 @@ static struct itimerval dispatcher_timer = {
         .tv_usec = DISPATCHER_TIMER_INTERVAL_MS*1000,
     },
     .it_value = {
-        .tv_usec = DISPATCHER_TIMER_INTERVAL_MS*1000,
+        .tv_usec = 1,
     }
 };
 
@@ -65,9 +69,17 @@ void ppos_init () {
 
     main_task.id = 0;
     main_task.status = RUNNING;
+    main_task.clock_ticks = TASK_TIMER_TICK;
     current_task = &main_task;
+    dispatcher_scheduled_task = current_task;
+    current_task->last_schedule_tick = current_tick;
 
     task_init(&dispatcher_task, dispatcher, NULL);
+}
+
+void task_ready(task_t *task) {
+    task->status = READY;
+    pqueue_append(&ready_queue, (void*)task);
 }
 
 int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
@@ -84,16 +96,16 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->context.uc_link = 0;
 
     task->id = ++last_task_id;
-    task->status = READY;
     task->vg_id = VALGRIND_STACK_REGISTER(stack, stack + STACK_SIZE);
     task->priority = 0;
 
     task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
     task->last_schedule_tick = current_tick;
     task->tick_start = current_tick;
+    task->waiting_task_id = -1;
     makecontext(&task->context, (void*)(*start_routine), 1, arg);
 
-    pqueue_append(&ready_queue, (void*)task);
+    task_ready(task);
 
     #ifdef DEBUG
     printf ("task_init: iniciada tarefa %d\n", task->id) ;
@@ -116,6 +128,9 @@ int task_switch (task_t *task) {
 }
 
 void print_task_exit_stats(task_t *task) {
+    #ifndef TASK_STATS
+    return;
+    #endif
     unsigned int cpu_time = task->tick_used*DISPATCHER_TIMER_INTERVAL_MS;
     unsigned int execution_time = (current_tick-task->tick_start)*DISPATCHER_TIMER_INTERVAL_MS;
     printf(
@@ -130,9 +145,9 @@ void print_task_exit_stats(task_t *task) {
 void task_exit (int exit_code) {
     if (current_task == &main_task) {
         print_task_exit_stats(&main_task);
-        task_switch(&dispatcher_task);
+        int exit_code = task_wait(&dispatcher_task);
         print_task_exit_stats(&dispatcher_task);
-        exit(dispatcher_task.exit_code);
+        exit(exit_code);
     }
 
     #ifdef DEBUG
@@ -152,8 +167,9 @@ void task_exit (int exit_code) {
 }
 
 void task_yield () {
-    current_task->status = READY;
-    pqueue_append(&ready_queue, (void*)current_task);
+    if (current_task->status != SUSPENDED) {
+        task_ready(current_task);
+    }
     task_switch(&dispatcher_task);
 }
 
@@ -175,7 +191,6 @@ void task_destroy(task_t *task) {
 void task_setprio (task_t *task, int prio) {
     if (task == NULL)
         task = current_task;
-    assert(task != &main_task);
     
     task->priority = MAX(MIN(prio, MAX_TASK_PRIORITY), -MAX_TASK_PRIORITY);
 
@@ -190,6 +205,8 @@ int task_getprio (task_t *task) {
     return task->priority;
 }
 
+void awake_suspended_tasks(task_t *exited_task);
+
 void dispatcher(void *) {
     pqueue_remove(&ready_queue, dispatcher_task.ready_queue_index);
 
@@ -199,6 +216,7 @@ void dispatcher(void *) {
         dispatcher_scheduled_task->last_schedule_tick = current_tick;
         dispatcher_scheduled_task->clock_ticks = DISPATCHER_TIMER_INTERVAL_MS;
         dispatcher_scheduled_task->activations += 1;
+        dispatcher_scheduled_task->status = RUNNING;
         task_setprio(dispatcher_scheduled_task, dispatcher_scheduled_task->priority+1);
 
         #ifdef DEBUG
@@ -216,6 +234,7 @@ void dispatcher(void *) {
 
         switch (dispatcher_scheduled_task->status) {
             case EXITED:
+                awake_suspended_tasks(dispatcher_scheduled_task);
                 task_destroy(dispatcher_scheduled_task);
                 break;
             default:
@@ -234,7 +253,7 @@ void dispatcher_timer_handler(int signum) {
 
     current_task->tick_used += 1;
 
-    if (dispatcher_scheduled_task == NULL || dispatcher_scheduled_task == &main_task || dispatcher_scheduled_task == &dispatcher_task)
+    if (current_task == NULL || dispatcher_scheduled_task == NULL || dispatcher_scheduled_task == &dispatcher_task)
         return;
     dispatcher_scheduled_task->clock_ticks -= 1;
     if (dispatcher_scheduled_task->clock_ticks < 0) {
@@ -244,4 +263,39 @@ void dispatcher_timer_handler(int signum) {
 
 unsigned int systime() {
     return current_tick;
+}
+
+int task_wait (task_t *task) {
+    if (task == NULL || task == current_task) {
+        return -1;
+    }
+    if (task->status == EXITED) {
+        return task->exit_code;
+    }
+    task->has_suspended_tasks = true;
+    current_task->waiting_task_id = task->id;
+    current_task->status = SUSPENDED;
+    task_yield();
+    return task->exit_code;
+}
+
+void task_awake (task_t *task, task_t **queue) {
+    queue_remove((queue_t**)queue, (queue_t*)task);
+    task->waiting_task_id = -1;
+    task_ready(current_task);
+}
+
+void awake_suspended_tasks(task_t *exited_task) {
+    if (!exited_task->has_suspended_tasks)
+        return;
+    task_t *suspended_task = suspended_tasks;
+    while (suspended_task != NULL) {
+        task_t *next_task = suspended_task->next;
+
+        if (suspended_task->waiting_task_id == exited_task->id) {
+            task_awake(suspended_task, &suspended_tasks);
+        } else if (next_task == suspended_tasks)
+            break;
+        suspended_task = next_task;
+    }
 }

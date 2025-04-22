@@ -10,6 +10,7 @@
 #include <ucontext.h>		// biblioteca POSIX de trocas de contexto
 #include <sys/time.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {
   READY,
@@ -40,6 +41,9 @@ typedef struct task_t
   unsigned int tick_start;
   unsigned int activations;
   unsigned int last_schedule_tick;
+
+  int waiting_task_id;
+  bool has_suspended_tasks;
 } task_t ;
 
 // estrutura que define um semáforo
