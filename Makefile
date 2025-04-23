@@ -47,3 +47,6 @@ testSemaphore: tests/semaphoreTest.c $(BASE_FILES)
 
 testSemaphoreStress: tests/semaphoreStressTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testSemaphoreStress $(BASE_INCLUDES) $(BASE_FILES) tests/semaphoreStressTest.c
+
+testProducerConsumer: tests/producerConsumerTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testProducerConsumer $(BASE_INCLUDES) $(BASE_FILES) tests/producerConsumerTest.c
