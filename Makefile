@@ -44,3 +44,6 @@ testTaskSleep: tests/taskSleepTest.c $(BASE_FILES)
 
 testSemaphore: tests/semaphoreTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testSemaphore $(BASE_INCLUDES) $(BASE_FILES) tests/semaphoreTest.c
+
+testSemaphoreStress: tests/semaphoreStressTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testSemaphoreStress $(BASE_INCLUDES) $(BASE_FILES) tests/semaphoreStressTest.c
