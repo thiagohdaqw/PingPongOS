@@ -221,6 +221,7 @@ void dispatcher(void *) {
 
     do {
         while (pqueue_size(&ready_queue) > 0) {
+            // TODO: improve cpu scheduling to minimize starvation
             dispatcher_scheduled_task = (task_t*)pqueue_pop(&ready_queue);
             
             dispatcher_scheduled_task->last_schedule_tick = current_tick;

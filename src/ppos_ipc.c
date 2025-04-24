@@ -80,3 +80,19 @@ int sem_destroy (semaphore_t *s) {
     queue_remove((queue_t**)&semaphores, (queue_t*)s);
     return 0;
 }
+
+int mutex_init (mutex_t *m) {
+    return sem_init(&m->sem, 1);
+}
+
+int mutex_lock (mutex_t *m) {
+    return sem_down(&m->sem);
+}
+
+int mutex_unlock (mutex_t *m) {
+    return sem_up(&m->sem);
+}
+
+int mutex_destroy (mutex_t *m) {
+    return sem_destroy(&m->sem);
+}
