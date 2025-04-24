@@ -31,6 +31,7 @@ static task_t dispatcher_task = {0};
 
 static pqueue_t ready_queue = {0};
 static pqueue_t sleep_queue = {0};
+static task_t *waiting_tasks = NULL; 
 static task_t *suspended_tasks = NULL; 
 
 static unsigned int current_tick = 0;
@@ -258,9 +259,8 @@ void dispatcher(void *) {
             pause();
             poll_sleeping_tasks();
         }
-    } while (pqueue_size(&sleep_queue) > 0 || pqueue_size(&ready_queue) > 0);
-    
-    
+    } while (pqueue_size(&sleep_queue) > 0 || pqueue_size(&ready_queue) > 0 || suspended_tasks != NULL);
+
     task_exit(0);
 }
 
@@ -294,7 +294,7 @@ int task_wait (task_t *task) {
     current_task->waiting_task_id = task->id;
     current_task->status = SUSPENDED;
 
-    queue_append((queue_t**)&suspended_tasks, (queue_t*)current_task);
+    queue_append((queue_t**)&waiting_tasks, (queue_t*)current_task);
     
     DEBUG_PRINT("[%d] task_wait: waiting for task %d\n", current_task->id, task->id);
 
@@ -305,6 +305,8 @@ int task_wait (task_t *task) {
 }
 
 void task_awake (task_t *task, task_t **queue) {
+    if (queue == NULL)
+        queue = &suspended_tasks;
     if (queue_remove((queue_t**)queue, (queue_t*)task) < 0) {
         fprintf(stderr, "ERROR task_awake: failed to remove task %d from queue\n", task->id);
     }
@@ -314,16 +316,27 @@ void task_awake (task_t *task, task_t **queue) {
     task_ready(task);
 }
 
+void task_suspend (task_t **queue) {
+    DEBUG_PRINT("[%d] task_suspend: suspending current task\n", current_task->id);
+    if (queue != NULL) {
+        queue_remove((queue_t**)queue, (queue_t*)current_task);
+    }
+    current_task->waiting_task_id = -1;
+    current_task->status = SUSPENDED;
+    queue_append((queue_t**)&suspended_tasks, (queue_t*)current_task);
+    task_yield();
+}
+
 void awake_suspended_tasks(task_t *exited_task) {
     if (!exited_task->has_suspended_tasks)
         return;
-    task_t *suspended_task = suspended_tasks;
+    task_t *suspended_task = waiting_tasks;
     while (suspended_task != NULL) {
         task_t *next_task = suspended_task->next;
 
         if (suspended_task->waiting_task_id == exited_task->id) {
-            task_awake(suspended_task, &suspended_tasks);
-        } else if (next_task == suspended_tasks || next_task == current_task)
+            task_awake(suspended_task, &waiting_tasks);
+        } else if (next_task == waiting_tasks || next_task == current_task)
             break;
         suspended_task = next_task;
     }

@@ -1,6 +1,6 @@
 CFLAGS = -ggdb -Wall
-LINK_FLAGS = -lm
-BASE_FILES = src/ppos.c src/ppos_ipc.c src/ppos_mqueue.c src/queue.c src/pqueue.c
+LINK_FLAGS = -lm -lrt
+BASE_FILES = src/ppos.c src/ppos_ipc.c src/ppos_mqueue.c src/ppos_disk.c src/disk.c src/queue.c src/pqueue.c
 BASE_INCLUDES = -Isrc/
 
 testQueue: $(BASE_FILES) tests/queueTest.c
@@ -57,3 +57,9 @@ testBarrier: tests/barrierTest.c $(BASE_FILES)
 
 testMqueue: tests/mqueueTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testMqueue $(BASE_INCLUDES) $(BASE_FILES) tests/mqueueTest.c $(LINK_FLAGS)
+
+testDiskReadAll: tests/diskReadAllTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testDiskReadAll $(BASE_INCLUDES) $(BASE_FILES) tests/diskReadAllTest.c $(LINK_FLAGS)
+
+testDiskReverse: tests/diskReverseTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testDiskReverse $(BASE_INCLUDES) $(BASE_FILES) tests/diskReverseTest.c $(LINK_FLAGS)
