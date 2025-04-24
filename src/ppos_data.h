@@ -12,6 +12,8 @@
 #include <sys/time.h>
 #include <ucontext.h>  // biblioteca POSIX de trocas de contexto
 
+#include "queue.h"
+
 typedef enum {
     READY,
     RUNNING,
@@ -71,8 +73,24 @@ typedef struct {
 } barrier_t;
 
 // estrutura que define uma fila de mensagens
+
 typedef struct {
-    // preencher quando necessário
+    void *buffer;
+    int buffer_item_size;
+    int buffer_index;
+    
+    int count;
+    int size;
+    int capacity;
+    
+    queue_t *items;
+    task_t *waiting_tasks;
+
+    mutex_t mutex;
+    semaphore_t spares;
+    semaphore_t produceds;
+    // messages quando necessário
 } mqueue_t;
+
 
 #endif
