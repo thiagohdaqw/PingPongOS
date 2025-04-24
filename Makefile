@@ -50,3 +50,6 @@ testSemaphoreStress: tests/semaphoreStressTest.c $(BASE_FILES)
 
 testProducerConsumer: tests/producerConsumerTest.c $(BASE_FILES)
 	$(CC) $(CFLAGS) -o build/testProducerConsumer $(BASE_INCLUDES) $(BASE_FILES) tests/producerConsumerTest.c
+
+testBarrier: tests/barrierTest.c $(BASE_FILES)
+	$(CC) $(CFLAGS) -o build/testBarrier $(BASE_INCLUDES) $(BASE_FILES) tests/barrierTest.c

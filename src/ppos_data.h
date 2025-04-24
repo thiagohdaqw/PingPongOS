@@ -58,12 +58,15 @@ typedef struct semaphore_t {
 
 // estrutura que define um mutex
 typedef struct {
-    semaphore_t *sem;
+    semaphore_t sem;
     // preencher quando necessário
 } mutex_t;
 
 // estrutura que define uma barreira
 typedef struct {
+    semaphore_t sem;
+    int value;
+    int count;
     // preencher quando necessário
 } barrier_t;
 

@@ -154,8 +154,9 @@ void print_task_exit_stats(task_t *task) {
 void task_exit (int exit_code) {
     if (current_task == &main_task) {
         print_task_exit_stats(&main_task);
-        int exit_code = task_wait(&dispatcher_task);
-        print_task_exit_stats(&dispatcher_task);
+        if (exit_code == 0) {
+            exit_code = task_wait(&dispatcher_task);
+        }
         exit(exit_code);
     }
 

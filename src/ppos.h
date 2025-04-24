@@ -115,7 +115,7 @@ int mutex_destroy (mutex_t *m) ;
 int barrier_init (barrier_t *b, int N) ;
 
 // espera na barreira
-int barrier_wait (barrier_t *b) ;
+int barrier_join (barrier_t *b) ;
 
 // destrói a barreira, liberando as tarefas
 int barrier_destroy (barrier_t *b) ;
